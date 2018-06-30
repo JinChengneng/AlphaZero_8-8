@@ -44,6 +44,7 @@ class TreeNode(object):
                 self._children[action] = TreeNode(self, prob)
 
     def select(self, c_puct):
+        # MCTS模拟的时候在非叶结点选择的是Q+u最大的子结点
         """Select action among children that gives maximum action value, Q plus bonus u(P).
         Returns:
         A tuple of (action, next_node)
@@ -58,6 +59,7 @@ class TreeNode(object):
         # Count visit.
         self._n_visits += 1
         # Update Q, a running average of values for all visits.
+        # 展开为 Q = ((n-1)*Q_old + leaf_value)/n
         self._Q += 1.0*(leaf_value - self._Q) / self._n_visits
 
     def update_recursive(self, leaf_value):
@@ -150,6 +152,11 @@ class MCTS(object):
             return 1 if winner == player else -1
 
     def get_move(self, state):
+        #MCTS模拟的时候在非叶结点选择的是Q+u最大的子结点，正式下棋的时候只看模拟的时候的visit次数
+        #模拟的时候选择Q+u最大的节点，这是exploitation和exploration的平衡，
+        # Q对应exploitation，就是我们偏向于选择实际模拟过程中表现好的分支，
+        # u对应exploration，我们需要给访问次数少的分支一些机会，充分的探索，可能能发现更好的策略。
+        # 在正式下棋的时候，我们不再需要探索，我们只需要充分利用模拟时探索到的信息，来选择最优的分支，一般我们选择visit次数最多的分支
         """Runs all playouts sequentially and returns the most visited action.
         Arguments:
         state -- the current state, including both game state and the current player.

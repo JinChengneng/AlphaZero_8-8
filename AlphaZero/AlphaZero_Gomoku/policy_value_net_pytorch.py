@@ -19,23 +19,28 @@ def set_learning_rate(optimizer, lr):
 
 class Net(nn.Module):
     """policy-value network module"""
+    #网络结构
     def __init__(self, board_width, board_height):
         super(Net, self).__init__()
 
         self.board_width = board_width
         self.board_height = board_height
         # common layers
+        # 三层卷积网络
         self.conv1 = nn.Conv2d(4, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1) 
         self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
         # action policy layers
+        # 走子概率（策略子网络）
         self.act_conv1 = nn.Conv2d(128, 4, kernel_size=1)
         self.act_fc1 = nn.Linear(4*board_width*board_height, board_width*board_height)
         # state value layers
+        # 局面评估值（价值子网络）
         self.val_conv1 = nn.Conv2d(128, 2, kernel_size=1)
         self.val_fc1 = nn.Linear(2*board_width*board_height, 64)
         self.val_fc2 = nn.Linear(64, 1)
     
+    #传播过程
     def forward(self, state_input):
         # common layers
         x = F.relu(self.conv1(state_input))
@@ -55,6 +60,7 @@ class Net(nn.Module):
 
 class PolicyValueNet():
     """policy-value network """
+    #如果使用GPU服务器，需要将use_gpu参数改为Ture
     def __init__(self, board_width, board_height, net_params=None, use_gpu=False):        #use_gpu=False
         self.use_gpu = use_gpu
         self.board_width = board_width

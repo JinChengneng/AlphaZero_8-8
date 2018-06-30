@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 An implementation of the training pipeline of AlphaZero for Gomoku
 
@@ -12,6 +12,7 @@ import pickle  #import cPickle as pickle
 from collections import defaultdict, deque
 from game import Board, Game
 #from policy_value_net import PolicyValueNet  # Theano and Lasagne
+# 此处引入用Pytorch实现的策略价值网络
 from policy_value_net_pytorch import PolicyValueNet  # Pytorch
 from mcts_pure import MCTSPlayer as MCTS_Pure
 from mcts_alphaZero import MCTSPlayer
@@ -32,6 +33,8 @@ class TrainPipeline():
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
         self.temp = 1.0 # the temperature param
         self.n_playout = 400 # num of simulations for each move
+        # c_puct是MCTS里用来控制exploration-exploit tradeoff的参数
+        # 这个参数越大的话MCTS搜索的过程中就偏向于均匀的探索，越小的话就偏向于直接选择访问次数多的分支
         self.c_puct = 5
         self.buffer_size = 10000
         self.batch_size = 512 # mini-batch size for training
@@ -39,10 +42,14 @@ class TrainPipeline():
         self.play_batch_size = 1 
         self.epochs = 5 # num of train_steps for each update
         self.kl_targ = 0.025
+        # 检查当前策咯胜率的频率，当前设置为每50次训练后通过自我对弈评价当前策略
+        # 如果找到更优策略，则保存当前策咯模型
         self.check_freq = 50 
+        #训练迭代次数
         self.game_batch_num = 1500
         self.best_win_ratio = 0.0
         # num of simulations used for the pure mcts, which is used as the opponent to evaluate the trained policy
+        #每次训练蒙特卡洛树搜索的次数，初始化为1000（后续训练过程中会不断增加）
         self.pure_mcts_playout_num = 1000  
         if init_model:
             # start training from an initial policy-value net
@@ -90,10 +97,12 @@ class TrainPipeline():
         for i in range(self.epochs): 
             loss, entropy = self.policy_value_net.train_step(state_batch, mcts_probs_batch, winner_batch, self.learn_rate*self.lr_multiplier)
             new_probs, new_v = self.policy_value_net.policy_value(state_batch)
+            # kl距离，也叫做相对熵，衡量的是相同事件空间里的两个概率分布的差异情况
             kl = np.mean(np.sum(old_probs * (np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)), axis=1))  
             if kl > self.kl_targ * 4:   # early stopping if D_KL diverges badly
                 break
         # adaptively adjust the learning rate
+        # 通过比较新旧两个神经网络输出的KL散度（信息增益）来控制学习率，使得学习率快死增加然后逐渐减少
         if kl > self.kl_targ * 2 and self.lr_multiplier > 0.1:
             self.lr_multiplier /= 1.5
         elif kl < self.kl_targ / 2 and self.lr_multiplier < 10:
@@ -116,6 +125,7 @@ class TrainPipeline():
         for i in range(n_games):
             winner = self.game.start_play(current_mcts_player, pure_mcts_player, start_player=i%2, is_shown=0)
             win_cnt[winner] += 1
+        #计算赢率，获胜积一分，平局积0.5分，失败不计分，再以总积分除以总比赛次数
         win_ratio = 1.0*(win_cnt[1] + 0.5*win_cnt[-1])/n_games
         print("num_playouts:{}, win: {}, lose: {}, tie:{}".format(self.pure_mcts_playout_num, win_cnt[1], win_cnt[2], win_cnt[-1]))
         return win_ratio
@@ -128,9 +138,10 @@ class TrainPipeline():
                 print("batch i:{}, episode_len:{}".format(i+1, self.episode_len))                
                 if len(self.data_buffer) > self.batch_size:
                     loss, entropy = self.policy_update()                    
-                # check the performance of the current model锛宎nd save the model params
+                # check the performance of the current model and save the model params
                 if (i+1) % self.check_freq == 0:
                     print("current self-play batch: {}".format(i+1))
+                    # 与纯蒙特卡洛树进行十局对弈，计算对弈胜率
                     win_ratio = self.policy_evaluate()
                     net_params = self.policy_value_net.get_policy_param() # get model params
                     pickle.dump(net_params, open('current_policy_8_8_5_new.model', 'wb'), pickle.HIGHEST_PROTOCOL) # save model param to file
@@ -138,6 +149,7 @@ class TrainPipeline():
                         print("New best policy!!!!!!!!")
                         self.best_win_ratio = win_ratio
                         pickle.dump(net_params, open('best_policy_8_8_5_new.model', 'wb'), pickle.HIGHEST_PROTOCOL) # update the best_policy
+                        #如果当前策咯价值网络胜率为1，则提高纯蒙特卡洛树的搜索次数，继续训练
                         if self.best_win_ratio == 1.0 and self.pure_mcts_playout_num < 5000:
                             self.pure_mcts_playout_num += 1000
                             self.best_win_ratio = 0.0
@@ -146,6 +158,7 @@ class TrainPipeline():
     
 
 if __name__ == '__main__':
+    #导入之前训练好的模型，此处为增量训练
     training_pipeline = TrainPipeline("best_policy_8_8_5_new.model")
     time_start = datetime.datetime.now()
     print("开始时间：" + time_start.strftime('%Y.%m.%d-%H:%M:%S'))

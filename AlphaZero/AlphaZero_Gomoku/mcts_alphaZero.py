@@ -181,6 +181,8 @@ class MCTSPlayer(object):
             move_probs[list(acts)] = probs
             if self._is_selfplay:
                 # add Dirichlet Noise for exploration (needed for self-play training)
+                #AlphaZero在每一步返回的概率分布里添加了Dirichlet noise以保证随机性，实现更多的探索
+                # 减小Dirichlet噪声的参数，可以避免自我对弈每局局面都很类似的情况
                 move = np.random.choice(acts, p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs))))    
                 self.mcts.update_with_move(move) # update the root node and reuse the search tree
             else:
